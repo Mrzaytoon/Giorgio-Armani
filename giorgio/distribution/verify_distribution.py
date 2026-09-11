@@ -304,6 +304,99 @@ assert(not view:minimize(true))
         self.assertNotIn("SET_AT_RELEASE", output.read_text(encoding="utf-8"))
 
 
+
+# The fixture only ever hashes three known inputs, so an honest or deliberately
+# broken host is a lookup table rather than a second SHA-256 implementation.
+B64_VECTOR = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/w=="
+
+HASH_FIXTURE = """
+local vector = Installer.binaryVector()
+local B64 = "%s"
+local function honest(data)
+    if data == Installer.ASCII_VECTOR then return Installer.ASCII_DIGEST end
+    if data == vector then return Installer.BINARY_DIGEST end
+    if data == B64 then return Installer.BINARY_DIGEST_B64 end
+    return string.rep("f", 64)
+end
+local function base64encode(data)
+    if data == vector then return B64 end
+    return ""
+end
+%s
+local selected = Installer.selectHash(CANDIDATES, BASE64)
+if not selected then print("none") else
+    print(selected.digestField)
+    local produced = selected.hash(vector)
+    print(produced == Installer.BINARY_DIGEST and "raw-correct"
+        or (produced == Installer.BINARY_DIGEST_B64 and "b64-correct" or "digest-unexpected"))
+    print(selected.rawHash(Installer.ASCII_VECTOR) == Installer.ASCII_DIGEST and "rawHash-ok" or "rawHash-broken")
+end
+"""
+
+
+class HashSelectionTests(unittest.TestCase):
+    """The executor this was first run against passes an ASCII self-test and then
+    returns the wrong digest for binary, which is what every asset here is. That
+    combination has to be detected rather than trusted."""
+
+    def select(self, host):
+        script = CORE + "\n" + (HASH_FIXTURE % (B64_VECTOR, host))
+        with tempfile.TemporaryDirectory(prefix="giorgio-hash-") as folder:
+            fixture = Path(folder) / "hash.luau"
+            fixture.write_text(script, encoding="utf-8")
+            run = subprocess.run([str(LUAU), str(fixture)], capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            return run.stdout.split()
+
+    def test_healthy_host_uses_the_recorded_sha256(self):
+        # A correct hash needs no workaround and must not be made to pay for one.
+        out = self.select("local CANDIDATES = {honest}\nlocal BASE64 = base64encode")
+        self.assertEqual(out[0], "sha256")
+        self.assertEqual(out[1], "raw-correct")
+
+    def test_binary_broken_host_falls_back_to_the_base64_digest(self):
+        # The real failure: right on ASCII, wrong the moment it meets a NUL byte.
+        host = """
+local function broken(data)
+    if data:find("%z") then return string.rep("b", 64) end
+    return honest(data)
+end
+local CANDIDATES = {broken}
+local BASE64 = base64encode"""
+        out = self.select(host)
+        self.assertEqual(out[0], "sha256_b64")
+        self.assertEqual(out[1], "b64-correct")
+        self.assertEqual(out[2], "rawHash-ok")
+
+    def test_binary_broken_host_without_base64_is_refused(self):
+        # Better a clear refusal than an install that writes unverified bytes.
+        host = """
+local function broken(data)
+    if data:find("%z") then return string.rep("b", 64) end
+    return honest(data)
+end
+local CANDIDATES = {broken}
+local BASE64 = nil"""
+        self.assertEqual(self.select(host)[0], "none")
+
+    def test_a_hash_that_fails_the_ascii_test_is_never_used(self):
+        host = 'local CANDIDATES = {function() return string.rep("a", 64) end}\nlocal BASE64 = base64encode'
+        self.assertEqual(self.select(host)[0], "none")
+
+    def test_first_working_candidate_wins_over_a_broken_one(self):
+        host = """
+local function broken(data)
+    if data:find("%z") then return string.rep("b", 64) end
+    return honest(data)
+end
+local CANDIDATES = {broken, honest}
+local BASE64 = nil"""
+        # broken has no base64 route, so selection must continue to the next one.
+        out = self.select(host)
+        self.assertEqual(out[0], "sha256")
+        self.assertEqual(out[1], "raw-correct")
+
+
 if __name__ == "__main__":
     if not LUAU.is_file():
         raise SystemExit("Real Luau runtime required for installer verification: " + str(LUAU))

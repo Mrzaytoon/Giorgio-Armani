@@ -17,6 +17,15 @@ local function validHash(value)
     return type(value) == "string" and #value == 64 and not value:find("[^0-9a-f]")
 end
 
+-- Which recorded digest to compare a hash against. env.digestField is chosen once,
+-- by self-test, and is "sha256" on a host whose SHA-256 is correct for binary or
+-- "sha256_b64" on one that is only correct for clean ASCII.
+local function expected(env, entry)
+    local field = env.digestField or "sha256"
+    return entry[field] or entry.sha256
+end
+Installer.expected = expected
+
 function Installer.validPath(value)
     if value == "Giorgio.lua" then return true end
     if type(value) ~= "string" or #value > 240 or value:sub(1, 15) ~= "Giorgio/assets/" then return false end
@@ -40,6 +49,7 @@ function Installer.validateManifest(manifest)
         assert(type(file) == "table" and Installer.validPath(file.path), "Unsafe Giorgio install path")
         assert(not folded[file.path:lower()], "Duplicate or case-colliding install path")
         assert(integer(file.bytes) and file.bytes <= CHUNK_LIMIT and validHash(file.sha256), "Invalid release file metadata")
+        assert(file.sha256_b64 == nil or validHash(file.sha256_b64), "Invalid release file digest")
         folded[file.path:lower()] = true
         files[file.path] = file
         total += file.bytes
@@ -51,6 +61,7 @@ function Installer.validateManifest(manifest)
         assert(not chunkNames[chunk.file], "Duplicate release part name")
         chunkNames[chunk.file] = true
         assert(integer(chunk.bytes) and chunk.bytes > #MAGIC + 9 and chunk.bytes <= manifest.chunk_limit and validHash(chunk.sha256), "Invalid release part metadata")
+        assert(chunk.sha256_b64 == nil or validHash(chunk.sha256_b64), "Invalid release part digest")
         assert(type(chunk.files) == "table" and #chunk.files > 0, "Empty release part")
         for _, path in ipairs(chunk.files) do
             assert(type(path) == "string" and files[path] and not assigned[path], "Unknown or duplicated release part file")
@@ -62,7 +73,7 @@ function Installer.validateManifest(manifest)
 end
 
 function Installer.decodeChunk(env, chunk, blob, files)
-    assert(type(blob) == "string" and #blob == chunk.bytes and env.hash(blob) == chunk.sha256, "Downloaded part failed SHA-256 verification; run the installer again to retry")
+    assert(type(blob) == "string" and #blob == chunk.bytes and env.hash(blob) == expected(env, chunk), "Downloaded part failed SHA-256 verification; run the installer again to retry")
     assert(blob:sub(1, #MAGIC) == MAGIC, "Invalid Giorgio part signature")
     local lengthText = blob:sub(#MAGIC + 1, #MAGIC + 8)
     assert(#lengthText == 8 and not lengthText:find("[^0-9a-f]") and blob:sub(#MAGIC + 9, #MAGIC + 9) == "\n", "Invalid Giorgio part header")
@@ -79,7 +90,7 @@ function Installer.decodeChunk(env, chunk, blob, files)
         local file = files[row.path]
         assert(file and row.bytes == file.bytes and row.sha256 == file.sha256 and row.offset == offset, "Release part metadata differs from manifest")
         local data = blob:sub(payloadStart + offset, payloadStart + offset + file.bytes - 1)
-        assert(#data == file.bytes and env.hash(data) == file.sha256, "Release asset failed SHA-256 verification")
+        assert(#data == file.bytes and env.hash(data) == expected(env, file), "Release asset failed SHA-256 verification")
         rows[index] = {path = file.path, data = data}
         offset += file.bytes
     end
@@ -91,7 +102,7 @@ function Installer.install(env, url, manifestHash)
     assert(type(url) == "string" and url:match("^https://[^%s]+/manifest%.json$") and validHash(manifestHash), "Giorgio release is not configured; connect the release URL and SHA-256 first")
     env.progress("manifest", 0, 0, 0, 0)
     local manifestBody = env.fetch(url)
-    assert(type(manifestBody) == "string" and #manifestBody <= 32 * 1024 * 1024 and env.hash(manifestBody) == manifestHash, "Giorgio manifest failed SHA-256 verification")
+    assert(type(manifestBody) == "string" and #manifestBody <= 32 * 1024 * 1024 and (env.rawHash or env.hash)(manifestBody) == manifestHash, "Giorgio manifest failed SHA-256 verification")
     local manifest = env.decode(manifestBody)
     local files = Installer.validateManifest(manifest)
     local valid, complete, transferred, installed = {}, 0, 0, 0
@@ -99,7 +110,7 @@ function Installer.install(env, url, manifestHash)
     for index, file in ipairs(manifest.files) do
         if env.isfile(file.path) then
             local ok, data = pcall(env.readfile, file.path)
-            if ok and type(data) == "string" and #data == file.bytes and env.hash(data) == file.sha256 then
+            if ok and type(data) == "string" and #data == file.bytes and env.hash(data) == expected(env, file) then
                 valid[file.path] = true
                 complete += file.bytes
                 installed += 1
@@ -135,7 +146,7 @@ function Installer.install(env, url, manifestHash)
                     createParents(row.path)
                     env.writefile(row.path, row.data)
                     local written = env.readfile(row.path)
-                    assert(type(written) == "string" and #written == files[row.path].bytes and env.hash(written) == files[row.path].sha256, "Written asset failed verification; run the installer again")
+                    assert(type(written) == "string" and #written == files[row.path].bytes and env.hash(written) == expected(env, files[row.path]), "Written asset failed verification; run the installer again")
                     valid[row.path] = true
                     complete += files[row.path].bytes
                     installed += 1
@@ -151,7 +162,7 @@ function Installer.install(env, url, manifestHash)
     end
     assert(complete == manifest.total_bytes and installed == #manifest.files, "Giorgio installation is incomplete")
     local runtime = env.readfile("Giorgio.lua")
-    assert(type(runtime) == "string" and #runtime == files["Giorgio.lua"].bytes and env.hash(runtime) == files["Giorgio.lua"].sha256, "Installed runtime failed final verification")
+    assert(type(runtime) == "string" and #runtime == files["Giorgio.lua"].bytes and env.hash(runtime) == expected(env, files["Giorgio.lua"]), "Installed runtime failed final verification")
     env.progress("ready", complete, manifest.total_bytes, transferred, installed)
     env.execute(runtime)
     return {bytes = complete, transferred = transferred, files = installed, version = manifest.version}
@@ -198,6 +209,55 @@ function Installer.newProgressView(render)
     end
     return view
 end
+-- Pick a digest this host computes correctly.
+--
+-- "abc" is clean ASCII and proves nothing about binary, which is what every asset
+-- here is. One executor passes the ASCII test and then returns the digest of the
+-- empty string for a buffer beginning with NUL. So the binary vector decides:
+-- pass it and the recorded SHA-256 is usable directly; fail it, and base64 turns
+-- the payload into the ASCII this host does handle, which is what sha256_b64 is.
+Installer.ASCII_VECTOR = "abc"
+Installer.ASCII_DIGEST = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+Installer.BINARY_DIGEST = "40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880"
+Installer.BINARY_DIGEST_B64 = "ab7727e21f4bbba6508dd72804d97435a78eb44a1e277af1c0f65a8522de382e"
+
+function Installer.binaryVector()
+    local pieces = {}
+    for byte = 0, 255 do pieces[#pieces + 1] = string.char(byte) end
+    return table.concat(pieces)
+end
+
+function Installer.normalizedHash(value)
+    if type(value) ~= "string" then return "" end
+    if #value == 32 then return (value:gsub(".", function(character) return string.format("%02x", string.byte(character)) end)) end
+    return value:lower()
+end
+
+function Installer.selectHash(candidates, base64Of)
+    local normalize, vector = Installer.normalizedHash, Installer.binaryVector()
+    for _, candidate in ipairs(candidates) do
+        local ok, result = pcall(candidate, Installer.ASCII_VECTOR)
+        if ok and normalize(result) == Installer.ASCII_DIGEST then
+            local rawHash = function(data) return normalize(candidate(data)) end
+            local okBinary, binaryResult = pcall(candidate, vector)
+            if okBinary and normalize(binaryResult) == Installer.BINARY_DIGEST then
+                return {hash = rawHash, rawHash = rawHash, digestField = "sha256"}
+            end
+            if type(base64Of) == "function" then
+                local okEncoded, encoded = pcall(base64Of, vector)
+                if okEncoded and type(encoded) == "string" then
+                    local okB64, b64Result = pcall(candidate, encoded)
+                    if okB64 and normalize(b64Result) == Installer.BINARY_DIGEST_B64 then
+                        return {hash = function(data) return normalize(candidate(base64Of(data))) end,
+                                rawHash = rawHash, digestField = "sha256_b64"}
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
 -- CORE END
 
 assert(MANIFEST_URL ~= "" and MANIFEST_SHA256 ~= "", "Giorgio installer is prepared but no release is connected yet. Configure its manifest URL and SHA-256 after the GitHub release is ready.")
@@ -207,8 +267,6 @@ local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local knownDigest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-local hashFunction
 local candidates = {}
 for _, provider in ipairs({environment.crypt or {}, (environment.syn or {}).crypt or {}}) do
     if type(provider.hash) == "function" then
@@ -217,19 +275,18 @@ for _, provider in ipairs({environment.crypt or {}, (environment.syn or {}).cryp
         table.insert(candidates, function(data) return provider.hash(data) end)
     end
 end
-local function normalizedHash(value)
-    if type(value) ~= "string" then return "" end
-    if #value == 32 then return (value:gsub(".", function(character) return string.format("%02x", string.byte(character)) end)) end
-    return value:lower()
-end
-for _, candidate in ipairs(candidates) do
-    local ok, result = pcall(candidate, "abc")
-    if ok and normalizedHash(result) == knownDigest then
-        hashFunction = function(data) return normalizedHash(candidate(data)) end
-        break
+local base64Of
+for _, provider in ipairs({environment.crypt or {}, (environment.syn or {}).crypt or {}}) do
+    for _, name in ipairs({"base64encode", "base64_encode"}) do
+        if not base64Of and type(provider[name]) == "function" then base64Of = provider[name] end
+    end
+    if not base64Of and type(provider.base64) == "table" and type(provider.base64.encode) == "function" then
+        base64Of = provider.base64.encode
     end
 end
-assert(hashFunction, "Giorgio installation needs a working crypt.hash SHA-256 capability; this executor did not pass its hash self-test")
+local selected = Installer.selectHash(candidates, base64Of)
+assert(selected, "Giorgio installation needs a SHA-256 capability that is correct for binary data. This executor's crypt.hash passed its ASCII self-test but returned the wrong digest for binary, and no working base64 fallback was available.")
+local hashFunction, rawHashFunction, digestField = selected.hash, selected.rawHash, selected.digestField
 for _, name in ipairs({"isfile", "readfile", "writefile", "makefolder", "isfolder", "loadstring"}) do
     assert(type(environment[name]) == "function", "Giorgio installation needs executor capability: " .. name)
 end
@@ -432,6 +489,8 @@ end
 environment.GIORGIO_INSTALL_RUNNING = true
 local ok, result = pcall(Installer.install, {
     hash = hashFunction,
+    rawHash = rawHashFunction,
+    digestField = digestField,
     decode = function(value) return HttpService:JSONDecode(value) end,
     fetch = fetch,
     isfile = environment.isfile,

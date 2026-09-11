@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 from pathlib import Path
@@ -31,14 +32,31 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def digest_b64(data: bytes) -> str:
+    """SHA-256 of the base64 encoding of `data`.
+
+    Some executors' crypt.hash returns wrong digests for binary input but is
+    correct on clean ASCII, so this is the form those hosts can verify.
+    """
+    return hashlib.sha256(base64.b64encode(data)).hexdigest()
+
+
 def json_bytes(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("ascii")
+
+
+# A part header carries only what decoding a part needs. Digests the installer
+# looks up from the manifest stay out of it, so adding one does not rewrite every
+# part's bytes and force a full re-upload of the release.
+HEADER_FIELDS = ("path", "bytes", "sha256")
 
 
 def chunk_header(rows: list[tuple[dict, bytes]]) -> bytes:
     entries, offset = [], 0
     for meta, payload in rows:
-        entries.append({**meta, "offset": offset})
+        entry = {field: meta[field] for field in HEADER_FIELDS}
+        entry["offset"] = offset
+        entries.append(entry)
         offset += len(payload)
     header = json_bytes({"schema": 1, "files": entries})
     if len(header) > MAX_HEADER_BYTES:
@@ -107,7 +125,7 @@ def package(runtime: Path, assets: Path, output: Path, version: str, limit: int 
             raise ValueError("Internal chunk sizing error")
         filename = f"chunk-{len(manifest['chunks']) + 1:04d}.gpk"
         (output / filename).write_bytes(blob)
-        manifest["chunks"].append({"file": filename, "bytes": len(blob), "sha256": digest(blob),
+        manifest["chunks"].append({"file": filename, "bytes": len(blob), "sha256": digest(blob), "sha256_b64": digest_b64(blob),
                                    "files": [row[0]["path"] for row in pending]})
         pending.clear()
 
@@ -116,7 +134,7 @@ def package(runtime: Path, assets: Path, output: Path, version: str, limit: int 
         if path.stat().st_size > limit:
             raise ValueError(f"Individual file exceeds chunk limit: {name}")
         payload = path.read_bytes()
-        meta = {"path": name, "bytes": len(payload), "sha256": digest(payload)}
+        meta = {"path": name, "bytes": len(payload), "sha256": digest(payload), "sha256_b64": digest_b64(payload)}
         if chunk_size([(meta, payload)]) > limit:
             raise ValueError(f"Individual file plus its header exceeds chunk limit: {name}")
         if pending and chunk_size(pending + [(meta, payload)]) > limit:
