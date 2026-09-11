@@ -1,0 +1,4 @@
+# The runtime and its assets are verified by SHA-256 at install time, so what is
+# stored here must be the same bytes that were hashed. Newline translation would
+# silently change them.
+* -text
