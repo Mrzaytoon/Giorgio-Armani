@@ -5,7 +5,7 @@ local K, Players, LP = L.Combat, L.Players, L.LP
 local R = { repRoot=true, fling=true, holdLimit=120, workerActive=false,
   targetName="", controls={}, peak=0, error=0, tuneSerial=0, preview=true,
   POWER_LIMIT=1e18, loopMode="Loop target", turnDuration=1.2, followCamera=true, voidGuard=true,
-  voidAim=true, voidRoute=nil }
+  voidAim=true, voidRoute=nil, faceTarget=true, facingYaw=nil }
 L.RepRoot = R
 R.settings = {x=0,y=0,z=0,pitch=-90,yaw=0,roll=0,variant="Lumen maximum"}
 local Presets = {
@@ -246,6 +246,39 @@ function Geometry.score(evidence,sample,context)
 end
 R.Geometry=Geometry
 -- ROOT_GEOMETRY_END
+-- The heading that points our body at the target, or nil to leave the mount
+-- rotation alone. Kept separate from the camera on purpose: followCamera is the
+-- control that moves the view, and this one never touches it.
+-- The horizontal bearing a direction points along, or nil if it points straight
+-- up or down and has no horizontal bearing to report. Roblox look vectors are -Z.
+local function bearing(direction)
+  if not finiteVector(direction) then return nil end
+  local flat=Vector3.new(direction.X,0,direction.Z)
+  if not finite(flat.Magnitude) or flat.Magnitude<0.25 then return nil end
+  return math.atan2(-flat.X,-flat.Z)
+end
+function R.facing(part,mountPosition,rotation)
+  if not R.faceTarget then return nil end
+  if not finiteVector(part.Position) or not finiteVector(mountPosition) then return R.facingYaw end
+  local toTarget=part.Position-mountPosition
+  local flat=Vector3.new(toTarget.X,0,toTarget.Z)
+  local reach=flat.Magnitude
+  -- Mounted directly under or over a target there is no horizontal direction to
+  -- face, and a look-at built on that spins on floating point noise. Hold the
+  -- last heading rather than inventing one.
+  if not finite(reach) or reach<0.5 then return R.facingYaw end
+  local want=math.atan2(-flat.X,-flat.Z)
+  -- Which axis reads as "forward" depends on the pose. An upright mount runs
+  -- along its look vector; the default fling mount is pitched -90, which puts
+  -- that vector on the floor and lays the body along its up axis instead.
+  local have=rotation and (bearing(rotation.LookVector) or bearing(rotation.UpVector))
+  if rotation and not have then return R.facingYaw end
+  -- Turn BY the difference. Setting an absolute yaw would discard the heading the
+  -- mount rotation already carries and point the body the opposite way.
+  local yaw=want-(have or 0)
+  if finite(yaw) then R.facingYaw=yaw end
+  return R.facingYaw
+end
 function R.mount(part,currentPosition,elapsed)
   R.aimPart=part
   local s=R.settings
@@ -256,7 +289,12 @@ function R.mount(part,currentPosition,elapsed)
   if s.variant=="Helix drive" and R.fling then
     offset=offset+Vector3.new(math.cos(elapsed*18),0,math.sin(elapsed*18))*0.15
   end
-  return CFrame.new(currentPosition+offset)*rotation
+  local position=currentPosition+offset
+  -- Pre-multiplied, so this is a turn about world Y. Every axis keeps its Y
+  -- component, which is what the fitted separation was measured from.
+  local face=R.facing(part,position,rotation)
+  if face then rotation=CFrame.Angles(0,face,0)*rotation end
+  return CFrame.new(position)*rotation
 end
 function R.drive(thrust,part,elapsed,flip)
   if R.settings.variant=="Helix drive" then thrust=CFrame.Angles(0,elapsed*18,0)*thrust end
@@ -583,7 +621,7 @@ end
 for key,range in pairs({repPower={R.POWER_LIMIT,0,R.POWER_LIMIT},repSpin={R.POWER_LIMIT,0,R.POWER_LIMIT},repLift={0.55,0,1},flingDuration={6,0.15,15},approachSettle={K.cfg.approachSettle,0.05,2}}) do
   K.cfg[key]=savedNumber(key,range[1],range[2],range[3])
 end
-for key,default in pairs({repRoot=true,fling=true,voidGuard=true,followCamera=true,preview=true,noclip=false,voidAim=true}) do
+for key,default in pairs({repRoot=true,fling=true,voidGuard=true,followCamera=true,preview=true,noclip=false,voidAim=true,faceTarget=true}) do
   R[key]=L.Cfg.feat("reproot."..key,default)==true
 end
 K.cfg.returnHome=L.Cfg.feat("reproot.returnHome",true)==true
@@ -636,6 +674,10 @@ function R.build()
   C.toggle(p,{id="reproot.voidGuard",text="Disable local void",desc="Prevents local void deletion; does not cancel server-controlled deaths",default=R.voidGuard,callback=R.setVoidGuard})
   C.toggle(p,{id="reproot.voidAim",text="Aim for the void",desc="Drives the target down where the map is open below, or out toward the nearest edge; falls back to the camera aim when neither exists",default=R.voidAim,callback=function(value) R.voidAim=value==true; R.voidRoute=nil end})
   R.controls.followCamera=C.toggle(p,{id="reproot.followCamera",text="View active target",desc="Switches directly to each target's view; follows their replacement character on respawn",default=R.followCamera,callback=R.setFollowCamera})
+  R.controls.faceTarget=C.toggle(p,{id="reproot.faceTarget",text="Face the target",desc="Turns your character to look at whoever you are latched to. Body only -- your camera stays where you put it",default=R.faceTarget,callback=function(value)
+    R.faceTarget=value==true
+    if not R.faceTarget then R.facingYaw=nil end
+  end})
   C.section(p,"saved setup")
   R.controls.autoSave=C.toggle(p,{persist=false,text="Auto-save config",desc="Save changes automatically. Turn off to keep edits in this session until you press Save now.",default=L.Cfg.data.autoSave~=false,callback=R.setAutoSave})
   C.actions(p,{{text="Save now",callback=R.saveConfig}})

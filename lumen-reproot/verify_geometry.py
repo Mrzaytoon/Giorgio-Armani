@@ -1,6 +1,7 @@
 """Exercise actual Rep Root geometry, observations and tune cancellation without a game client."""
 from pathlib import Path
 import argparse
+import re
 import subprocess
 import tempfile
 
@@ -210,6 +211,60 @@ near(Geometry.score(unsure,sample,openMap),Geometry.score(unsure),'an uncertain 
 local noContact=table.clone(evidence); noContact.contactCorrelated=false
 check(Geometry.score(noContact,droppedSample,openMap)==0,'a target that fell on its own still cannot win')
 
+-- ---- facing the target ------------------------------------------------------
+-- The whole design rests on one property: a world-Y yaw pre-multiplied onto the
+-- mount rotation leaves the Y component of every axis alone, and the fitted
+-- separation is measured from exactly those components. If that ever stops being
+-- true, the body could turn and quietly drag the contact geometry with it.
+for _,angles in ipairs({{0,0,0},{-90,0,0},{30,40,50},{-85,170,-130}}) do
+  local mount=CFrame.Angles(math.rad(angles[1]),math.rad(angles[2]),math.rad(angles[3]))
+  local plain=Geometry.projectedHalf(Vector3.new(2,3,0.75),mount)
+  for _,yaw in ipairs({0,0.3,1.2,math.pi,-2.4,6.0}) do
+    local turned=Geometry.projectedHalf(Vector3.new(2,3,0.75),CFrame.Angles(0,yaw,0)*mount)
+    near(turned.Y,plain.Y,'a world-Y facing yaw cannot change the fitted separation')
+  end
+end
+
+R.faceTarget=true; R.facingYaw=nil
+local function at(x,y,z) return {Position=Vector3.new(x,y,z)} end
+-- Roblox look vectors are -Z, so facing a target on -Z is a yaw of zero.
+local upright=CFrame.Angles(0,0,0)
+local origin=Vector3.new(0,0,0)
+near(R.facing(at(0,0,-10),origin,upright),0,'a target straight ahead needs no turn')
+near(R.facing(at(10,0,0),origin,upright),math.atan2(-10,0),'a target to the side turns the body toward it')
+local held=R.facing(at(10,0,0),origin,upright)
+-- Mounted directly under a target there is no horizontal heading to compute.
+check(R.facing(at(0,0,0),Vector3.new(0,-0.01,0),upright)==held,'straight overhead holds the last heading instead of spinning')
+check(R.facing(at(0.2,0,0.2),origin,upright)==held,'noise inside the deadzone does not re-aim')
+check(R.facing(at(0/0,0,0),origin,upright)==held,'an invalid target position holds the last heading')
+R.faceTarget=false
+check(R.facing(at(10,0,0),origin,upright)==nil,'turning the option off leaves the mount rotation alone')
+R.faceTarget=true; R.facingYaw=nil
+check(R.facing(at(0,0,0),origin,upright)==nil,'with no heading yet, overhead stays unrotated rather than guessing')
+
+-- The body must end up pointing AT the target from any mount pose, including the
+-- pitched-flat fling mount whose look vector aims at the floor.
+for _,pose in ipairs({{0,0,0},{-90,0,0},{-90,35,0},{0,120,0},{-90,0,25}}) do
+  local rotation=CFrame.Angles(math.rad(pose[1]),math.rad(pose[2]),math.rad(pose[3]))
+  for _,spot in ipairs({{0,0,-10},{10,0,0},{0,0,10},{-10,0,0},{7,0,7}}) do
+    R.facingYaw=nil
+    local target=at(spot[1],spot[2],spot[3])
+    local yaw=R.facing(target,origin,rotation)
+    local turned=CFrame.Angles(0,yaw,0)*rotation
+    local forward=turned.LookVector
+    local flatForward=Vector3.new(forward.X,0,forward.Z)
+    if flatForward.Magnitude<0.25 then
+      forward=turned.UpVector
+      flatForward=Vector3.new(forward.X,0,forward.Z)
+    end
+    flatForward=flatForward/flatForward.Magnitude
+    local wanted=Vector3.new(spot[1],0,spot[3])
+    wanted=wanted/wanted.Magnitude
+    check(flatForward.X*wanted.X+flatForward.Z*wanted.Z>0.999,'the body points at the target from any mount pose')
+  end
+end
+R.facingYaw=nil
+
 -- ---- above-root fit ---------------------------------------------------------
 -- The mount that sends a target down is the mirror of the one that sends it up.
 for _,targetRotation in ipairs({CFrame.Angles(0,0,0),CFrame.Angles(0.8,-0.5,0.3)}) do
@@ -315,6 +370,11 @@ reset('error'); R.autoTune(); restored('failed start cancels synchronously'); ch
 reset(); R.fling=false; R.autoTune(); check(attempts==0 and R.settings.y<0,'fling-off tune only fits geometry')
 print(tostring(checks)..' geometry / evidence / tuning lifecycle checks passed')
 '''
+
+facing = re.search(r"function R\.facing\b.*?\nend", addon, re.S)
+assert facing, "R.facing is missing from the addon"
+for forbidden in ("Camera", "followCamera", "cameraOwned"):
+    assert forbidden not in facing.group(0), f"facing must stay body-only; it references {forbidden}"
 
 with tempfile.TemporaryDirectory(prefix="reproot-geometry-") as folder:
     fixture = Path(folder) / "geometry.luau"
