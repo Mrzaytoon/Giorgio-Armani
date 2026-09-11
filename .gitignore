@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.Giorgio.staged.lua
+.LumenRepRoot.staged.lua
+# Rebuild inputs and machine-local records, not part of the distribution.
+giorgio/assets/media/
+giorgio/assets/research/
+giorgio/media-reference/
+giorgio/deployment.json
+giorgio/.tools/
+# Release output: the parts are attached to a GitHub Release, not committed.
+giorgio/distribution/releases/

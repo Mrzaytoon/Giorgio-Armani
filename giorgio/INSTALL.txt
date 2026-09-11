@@ -1,0 +1,23 @@
+GIORGIO — LOCAL PACKAGE
+
+Keep Giorgio.lua beside the Giorgio folder when extracting this package.
+Place the entire Giorgio folder in your client's workspace directory so media
+files resolve through the relative path Giorgio/assets/. Run Giorgio.lua.
+
+On the workstation used for this build, that folder is:
+C:\Users\61415\AppData\Local\Potassium\workspace\Giorgio\assets
+
+The full-resolution video frame sequences are stored locally, so the extracted
+asset folder is large. Keep every numbered frame and every audio.ogg file.
+Playback is timed to the source videos: 60 fps for the edits and the loader
+film, 25 fps for the pinstripe background. Actual rendered speed depends on client performance.
+
+Settings are stored in Giorgio/config.json. The Auto-save toggle controls
+automatic configuration saving; Save provides a manual save action.
+
+Credits and licensing: Giorgio/assets/CREDITS.md
+Detailed media dimensions and provenance: Giorgio/assets/README.md
+Asset verification: Giorgio/assets/verification.json
+
+Giorgio is a personal interface using the user's supplied media. It is not an
+official Giorgio Armani product. Rights remain with the original owners.

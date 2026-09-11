@@ -1,0 +1,168 @@
+{
+  "verified_utc": "2026-09-09T12:52:47.679809+00:00",
+  "checks": [
+    {
+      "asset": "gauge",
+      "frames": 253,
+      "atlas_frames_identical_to_sources": true,
+      "max_edge": 1024
+    },
+    {
+      "asset": "account",
+      "frames": 97,
+      "atlas_frames_identical_to_sources": true,
+      "max_edge": 1024
+    },
+    {
+      "asset": "compass",
+      "frames": 133,
+      "atlas_frames_identical_to_sources": true,
+      "max_edge": 1024
+    },
+    {
+      "asset": "grid-3",
+      "frames": 73,
+      "atlas_frames_identical_to_sources": true,
+      "max_edge": 1024
+    },
+    {
+      "asset": "cog",
+      "frames": 121,
+      "atlas_frames_identical_to_sources": true,
+      "max_edge": 1024
+    },
+    {
+      "asset": "document-list",
+      "frames": 157,
+      "atlas_frames_identical_to_sources": true,
+      "max_edge": 1024
+    },
+    {
+      "asset": "loading-twotone-loop",
+      "frames": 325,
+      "atlas_frames_identical_to_sources": true,
+      "max_edge": 1024
+    },
+    {
+      "asset": "background",
+      "frames": 200,
+      "all_frames_decoded": true,
+      "all_frame_hashes_match": true,
+      "original_source_hash_matches": true,
+      "fps": 25.0,
+      "size": [
+        1600,
+        1200
+      ],
+      "first_frame": "frame-00000.jpg",
+      "last_frame": "frame-00199.jpg"
+    },
+    {
+      "asset": "edit-one",
+      "frames": 1308,
+      "all_frames_decoded": true,
+      "all_frame_hashes_match": true,
+      "original_source_hash_matches": true,
+      "fps": 60.0,
+      "size": [
+        1920,
+        1080
+      ],
+      "first_frame": "frame-00000.jpg",
+      "last_frame": "frame-01307.jpg",
+      "audio": {
+        "channels": 2,
+        "duration": 21.801995,
+        "full_duration_within_100ms_of_source": true
+      }
+    },
+    {
+      "asset": "edit-two",
+      "frames": 3195,
+      "all_frames_decoded": true,
+      "all_frame_hashes_match": true,
+      "original_source_hash_matches": true,
+      "fps": 60.0,
+      "size": [
+        1920,
+        1080
+      ],
+      "first_frame": "frame-00000.jpg",
+      "last_frame": "frame-03194.jpg",
+      "audio": {
+        "channels": 2,
+        "duration": 53.241905,
+        "full_duration_within_100ms_of_source": true
+      }
+    },
+    {
+      "asset": "edit-three",
+      "frames": 1011,
+      "all_frames_decoded": true,
+      "all_frame_hashes_match": true,
+      "original_source_hash_matches": true,
+      "fps": 60.0,
+      "size": [
+        1920,
+        1080
+      ],
+      "first_frame": "frame-00000.jpg",
+      "last_frame": "frame-01010.jpg",
+      "audio": {
+        "channels": 2,
+        "duration": 16.856009,
+        "full_duration_within_100ms_of_source": true
+      }
+    },
+    {
+      "asset": "edit-four",
+      "frames": 1488,
+      "all_frames_decoded": true,
+      "all_frame_hashes_match": true,
+      "original_source_hash_matches": true,
+      "fps": 60.0,
+      "size": [
+        1920,
+        1080
+      ],
+      "first_frame": "frame-00000.jpg",
+      "last_frame": "frame-01487.jpg",
+      "audio": {
+        "channels": 2,
+        "duration": 24.853,
+        "full_duration_within_100ms_of_source": true
+      }
+    },
+    {
+      "asset": "loader-film",
+      "frames": 3620,
+      "all_frames_decoded": true,
+      "all_frame_hashes_match": true,
+      "original_source_hash_matches": true,
+      "fps": 60.0,
+      "size": [
+        1080,
+        608
+      ],
+      "first_frame": "frame-00000.jpg",
+      "last_frame": "frame-03619.jpg",
+      "audio": {
+        "channels": 2,
+        "duration": 60.347211,
+        "full_duration_within_100ms_of_source": true
+      }
+    },
+    {
+      "asset": "official_striped_eagle",
+      "transparent_symbol_decoded": true,
+      "hash_matches": true
+    },
+    {
+      "asset": "logo_and_sounds",
+      "transparent_logo_decoded": true,
+      "sounds_probed_and_hashes_match": true
+    }
+  ],
+  "scope": "Local packaged files; live Roblox rendering is not claimed.",
+  "result": "pass"
+}
