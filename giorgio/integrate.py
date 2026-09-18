@@ -113,7 +113,7 @@ end)
   C.toggle(interfacePage,{id="giorgio.introFilm",text="Film in the introduction",default=true,callback=function() end})
   C.slider(interfacePage,{id="giorgio.introVolume",text="Introduction film volume",min=0,max=2,step=.01,default=.65,callback=function() end})
   C.toggle(interfacePage,{id="giorgio.fullIntroFilm",text="Play the complete intro film",default=false,callback=function() end})
-  C.actions(interfacePage,{{text="Replay introduction",callback=function() L.Giorgio.load(function() end) end},
+  C.actions(interfacePage,{{text="Replay introduction",callback=function() L.Giorgio.load(function() end,true) end},
     {text="Giorgio Armani?",callback=L.Giorgio.openEdit}})
   C.paragraph(interfacePage,"Audio Logo (artxmpl-al-01) by Artxmpl (patreon.com/artxmpl), CC BY 4.0. Interface sounds: Kenney, CC0. Animated icons: line-md by Vjacheslav Trushkin, MIT. Giorgio Armani artwork belongs to its respective owner.")
 '''.replace('interfacePage','giorgioSettingsPage')

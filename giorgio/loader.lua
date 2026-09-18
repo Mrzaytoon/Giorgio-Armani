@@ -5,9 +5,27 @@ local function ease(x) x=math.clamp(x,0,1); return 1-(1-x)^3 end
 local function line(parent,name)
   return L.mk("Frame",{Name=name,AnchorPoint=Vector2.new(.5,.5),BackgroundColor3=WHITE,BorderSizePixel=0,Parent=parent})
 end
-function G.load(onReady)
+-- The cinematic + asset preload is a first-run experience. Once it has played
+-- through once on this executor, a marker file in the Giorgio folder skips it on
+-- every later execution so boots go straight into the app. `force` (the Replay
+-- introduction action) bypasses the marker to play it again on demand.
+local INTRO_MARK="Giorgio/.introseen"
+local function introSeen()
+  local ok,present=pcall(isfile,INTRO_MARK)
+  return ok and present==true
+end
+local function markIntroSeen()
+  pcall(function()
+    if not isfolder("Giorgio") then makefolder("Giorgio") end
+    if not isfile(INTRO_MARK) then writefile(INTRO_MARK,"1") end
+  end)
+end
+function G.load(onReady,force)
   if G.loader then G.loader:close(true,true) end
-  if L.Cfg.feat("giorgio.showLoader",true)==false then G.booting=false; onReady(); return end
+  if not force and (L.Cfg.feat("giorgio.showLoader",true)==false or introSeen()) then
+    G.booting=false; onReady(); return
+  end
+  markIntroSeen()
   G.booting=true
   local self={dead=false,time=0,muted=L.Cfg.feat("giorgio.sfx",true)==false}; G.loader=self
   self.gui=L.mk("ScreenGui",{Name="GiorgioPrelude",ResetOnSpawn=false,IgnoreGuiInset=true,DisplayOrder=20000,

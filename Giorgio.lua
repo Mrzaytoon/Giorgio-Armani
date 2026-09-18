@@ -28832,9 +28832,27 @@ local function ease(x) x=math.clamp(x,0,1); return 1-(1-x)^3 end
 local function line(parent,name)
   return L.mk("Frame",{Name=name,AnchorPoint=Vector2.new(.5,.5),BackgroundColor3=WHITE,BorderSizePixel=0,Parent=parent})
 end
-function G.load(onReady)
+-- The cinematic + asset preload is a first-run experience. Once it has played
+-- through once on this executor, a marker file in the Giorgio folder skips it on
+-- every later execution so boots go straight into the app. `force` (the Replay
+-- introduction action) bypasses the marker to play it again on demand.
+local INTRO_MARK="Giorgio/.introseen"
+local function introSeen()
+  local ok,present=pcall(isfile,INTRO_MARK)
+  return ok and present==true
+end
+local function markIntroSeen()
+  pcall(function()
+    if not isfolder("Giorgio") then makefolder("Giorgio") end
+    if not isfile(INTRO_MARK) then writefile(INTRO_MARK,"1") end
+  end)
+end
+function G.load(onReady,force)
   if G.loader then G.loader:close(true,true) end
-  if L.Cfg.feat("giorgio.showLoader",true)==false then G.booting=false; onReady(); return end
+  if not force and (L.Cfg.feat("giorgio.showLoader",true)==false or introSeen()) then
+    G.booting=false; onReady(); return
+  end
+  markIntroSeen()
   G.booting=true
   local self={dead=false,time=0,muted=L.Cfg.feat("giorgio.sfx",true)==false}; G.loader=self
   self.gui=L.mk("ScreenGui",{Name="GiorgioPrelude",ResetOnSpawn=false,IgnoreGuiInset=true,DisplayOrder=20000,
@@ -30915,7 +30933,7 @@ function R.build()
   C.toggle(giorgioSettingsPage,{id="giorgio.introFilm",text="Film in the introduction",default=true,callback=function() end})
   C.slider(giorgioSettingsPage,{id="giorgio.introVolume",text="Introduction film volume",min=0,max=2,step=.01,default=.65,callback=function() end})
   C.toggle(giorgioSettingsPage,{id="giorgio.fullIntroFilm",text="Play the complete intro film",default=false,callback=function() end})
-  C.actions(giorgioSettingsPage,{{text="Replay introduction",callback=function() L.Giorgio.load(function() end) end},
+  C.actions(giorgioSettingsPage,{{text="Replay introduction",callback=function() L.Giorgio.load(function() end,true) end},
     {text="Giorgio Armani?",callback=L.Giorgio.openEdit}})
   C.paragraph(giorgioSettingsPage,"Audio Logo (artxmpl-al-01) by Artxmpl (patreon.com/artxmpl), CC BY 4.0. Interface sounds: Kenney, CC0. Animated icons: line-md by Vjacheslav Trushkin, MIT. Giorgio Armani artwork belongs to its respective owner.")
   local activity=win:tab({name="Activity",chrome="hero",desc="Giorgio diagnostics and observed test results"})
