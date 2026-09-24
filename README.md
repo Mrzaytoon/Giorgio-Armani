@@ -3,7 +3,8 @@
 A Roblox interface built on the Lumen UI framework, with a dedicated Rep Root
 page. The presentation is an Armani-styled loading sequence, film viewer and
 player directory; the functional half is a Rep Root fling transaction with
-fitted mount geometry and an auto-tune that measures its own results.
+fitted mount geometry and an auto-tune that measures its own results, plus a
+Stand for The Strongest Battlegrounds that an owner commands from chat.
 
 ## Install
 
@@ -40,6 +41,8 @@ error rather than a partial install.
 | `Giorgio.lua` | The built runtime. **Generated — do not edit.** |
 | `lumen-reproot/` | The Lumen snapshot, its patch set, and the Rep Root pages |
 | `giorgio/` | Presentation: loader, media player, UI skin, player panel |
+| `giorgio/tsb-stand.lua` | The Stand tab: latch, attack angle, squad fan, grab carry |
+| `giorgio/tsb-ragebot.lua` | TSB game reads, input wire and void immunity |
 | `giorgio/media/` | Asset packaging, verification and deployment tools |
 | `giorgio/assets/` | Runtime assets and their attribution, minus the film media |
 | `giorgio/distribution/` | Release packager and the installer template |
@@ -66,6 +69,7 @@ python giorgio/verify_window.py              # window transitions
 python giorgio/verify_native.py              # native opacity and tooltips
 python giorgio/verify_player_panel.py        # directory search, sorting, row windowing
 python giorgio/verify_camera.py              # camera handoff, stop, respawn
+python giorgio/verify_stand.py               # the Stand: latch, angle, squad, carry (240 checks)
 python giorgio/media/verify_assets.py        # decodes and hashes every packaged frame
 python giorgio/distribution/verify_distribution.py  # install, resume, minimise
 ```
@@ -83,6 +87,46 @@ capped by the clearance that exists, so driving a target into a floor two studs
 down scores as two studs of a five hundred stud drop rather than as a success.
 With no survey available, scoring falls back to speed and travel exactly as
 before.
+
+## The Stand
+
+Only in The Strongest Battlegrounds (place 10449761463). The stand is this
+client's character; an owner chosen on the tab commands it from chat. Every
+latch is a `PhysicsRepRootPart` binding — others see us at
+`anchorRoot.CFrame * (our LOCAL root CFrame)`, so the raw pose is written as the
+local CFrame and the server composes it, with no follow lag.
+
+| Command | What it does |
+| --- | --- |
+| `.s` / `.d` | Summon beside you, or hide deep in the void |
+| `.a [name]` | Hunt a target from your chosen angle; nearest if blank |
+| `.stop` | Break off and come back |
+| `.b <name>` | Take hold of that player and carry them to you |
+| `.v <name>` | Take hold and carry them under the kill plane |
+| `.angle <where>` | behind, behind left/right, flanks, in front, above, below |
+| `.squad a,b` | Other stands to fan out with |
+| `.1`–`.4`, `.m1`, `.dash`, `.ult`, `.fling`, `.pose`, `.say` | The rest |
+
+**The attack angle** is one dial: 0 is directly behind the target, 90 their
+right, 180 in front, 270 their left, and it turns to face them from wherever it
+is put. A live preview draws every stand's slot on a real body while you tune —
+yours solid, the others as ghosts, with a ring for the distance.
+
+**Several stands share a target without a handshake.** A client-made instance
+never reaches another client, so there is nothing to send: each stand sorts the
+squad by user id, finds itself, and takes that slot of a fan centred on the
+angle. Everyone computes the same layout, the fan widens rather than let two
+stands share a swing, squadmates are never targeted, and each starts the skill
+rotation on its own slot.
+
+**The carry** rests on a measured fact: while a grab holds, the victim rides the
+stand's replicated position. So the stand takes hold and then moves — in to you,
+or down past the game's own −500 kill plane, which the target's client enforces
+on itself. The descent is paced across the hold the move has been watched to
+have and never stops while it lasts; snapping the whole distance leaves the
+victim behind and they are simply put back on the map. It learns which moves
+grab by watching which ones take hold, remembers their hold length, and takes
+the target again if they survive.
 
 ## Credits and licensing
 

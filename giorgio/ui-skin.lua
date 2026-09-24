@@ -49,7 +49,11 @@ function Window.mark(parent,size)
   return mark
 end
 local oldNew,oldTab,oldSelect=Window.new,Window.tab,Window.select
-local iconMap={ ["Rep Root"]="gauge",Targets="account",Players="account",Offsets="compass",Presets="grid-3",Interface="cog",Activity="document-list" }
+-- Tab name -> animated icon. The set is seven pre-uploaded sprite sheets, so a
+-- tab gets the closest glyph in it rather than one drawn to order. Stand used
+-- the compass, which says navigation; it is a figure standing behind you, so it
+-- takes the human one. Combat keeps a separate chrome glyph of its own.
+local iconMap={ ["Rep Root"]="gauge",Targets="account",Players="account",Offsets="compass",Presets="grid-3",Stand="account",Interface="cog",Activity="document-list" }
 function G.styleToast(parts,opts)
   local card=parts.card
   card.BackgroundColor3=T.c.surface

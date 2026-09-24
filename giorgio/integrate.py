@@ -119,5 +119,27 @@ end)
 '''.replace('interfacePage','giorgioSettingsPage')
     assert addon.count('  local activity=win:tab(')==1
     addon=addon.replace('  local activity=win:tab(',extra+'  local activity=win:tab(',1)
+    tsb=(root/'tsb-ragebot.lua').read_text(encoding='utf-8')
+    # embed the existing game reads and input adapter without enabling its
+    # independent automation loop, hotkey or void hooks.
+    reads=tsb[tsb.index('local Game = {}'):tsb.index('-- ---------------------------------------------------------------- the brain')]
+    ready=tsb[tsb.index('function TSB.selfReady(me)'):tsb.index('local function whitelisted')]
+    # The stand's deep void hide and its grab combo both put our own local root
+    # below TSB's -500 kill plane, so the void-immunity block travels with the
+    # adapter now. Its loop is never started here; the stand drives Void.tick().
+    void=tsb[tsb.index('local Void = { wanted = false'):tsb.index('-- ---------------------------------------------------------------- game reads')]
+    adapter='''do -- tsb movement adapter
+local RS=L.RunService
+local TSB={PLACE=10449761463,cfg={enabled=false,healthGuard=true}}
+R.TSB=TSB
+function TSB.supported() return game.PlaceId==TSB.PLACE end
+'''+void+reads+ready+'\nend\n'
+    # The stand wraps R.runOne, so it releases its binding before any Rep Root
+    # transaction starts. Targeting and Community were retired to _retired/.
+    stand=(root/'tsb-stand.lua').read_text(encoding='utf-8')
+    modules=adapter+'\n'+stand
+    addon=addon.replace('local function slider(page,label,key,min,max,step,desc,config)',modules+'\nlocal function slider(page,label,key,min,max,step,desc,config)',1)
+    assert addon.count('  win:navSection("Giorgio")\n')==1
+    addon=addon.replace('  win:navSection("Giorgio")\n','  win:navSection("TSB")\n  R.Stand.build(win)\n  win:navSection("Giorgio")\n',1)
     addon=addon.replace('initialWindow:show()','L.Giorgio.load(function() initialWindow:show() end)')
     return source,addon
